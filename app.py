@@ -1,115 +1,145 @@
 import streamlit as st
 import pandas as pd
-import heapq
+import networkx as nx
 import folium
 import random
-from streamlit_folium import st_folium
+import streamlit.components.v1 as components
 
-# ==========================================
-# 1. DATA & CONSTANTS (From your GPS script)
-# ==========================================
-# (Note: Paste your full CITY_COORDS dictionary here)
-CITY_COORDS = {
-    "AIIMS": (28.5672, 77.2100), "Adarsh Nagar": (28.7167, 77.1833),
-    "Vidhan Sabha": (28.6812, 77.2223), "IGI Airport": (28.5562, 77.1000),
-    "Madipur": (28.6740, 77.1182), "Anand Vihar": (28.6469, 77.3152)
-    # ... include all 176 from your file
-}
+# =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(layout="wide", page_title="Dijkstra Route Optimizer")
+st.title("🚀 Dijkstra Smart Route Optimizer")
 
-st.set_page_config(layout="wide", page_title="GPS Route Optimizer")
+# =========================
+# 1. LOAD DATA (Cached for Speed)
+# =========================
+@st.cache_data
+def load_and_clean_data():
+    # Loading the dataset from bookings.csv
+    df = pd.read_csv("bookings.csv", encoding="latin1", on_bad_lines='skip')
+    df.columns = df.columns.str.strip()
+    df['Ride Distance'] = pd.to_numeric(df['Ride Distance'], errors='coerce')
+    # Dropping rows where distance is missing to ensure Dijkstra works correctly
+    return df.dropna(subset=['Ride Distance'])
 
-# ==========================================
-# 2. CORE ROUTING ENGINE
-# ==========================================
-def dijkstra(nodes, edges, start, goal):
-    queue = [(0, start, [])]
-    seen = set()
-    while queue:
-        (cost, node, path) = heapq.heappop(queue)
-        if node not in seen:
-            path = path + [node]
-            seen.add(node)
-            if node == goal:
-                return (cost, path)
-            for (neighbor, weight) in edges.get(node, []):
-                heapq.heappush(queue, (cost + weight, neighbor, path))
-    return float("inf"), []
+df = load_and_clean_data()
+cities = sorted(set(df['Pickup Location']).union(set(df['Drop Location'])))
 
-# ==========================================
-# 3. STREAMLIT UI
-# ==========================================
-st.title("🗺️ Smart GPS Route Optimizer")
+# =========================
+# 2. BUILD GRAPH (Cached Resource)
+# =========================
+@st.cache_resource
+def build_base_graph(_df):
+    G = nx.Graph()
+    # Using itertuples for faster processing of large datasets
+    for row in _df.itertuples():
+        u, v, d = row[1], row[2], row[3] # Maps to Pickup, Drop, Distance
+        if G.has_edge(u, v):
+            # Keep only the shortest recorded distance for the base graph
+            if d < G[u][v]['weight']:
+                G[u][v]['weight'] = d
+        else:
+            G.add_edge(u, v, weight=d)
+    return G
 
-# Sidebar for Dynamic Environments
-st.sidebar.header("🌍 Environment Settings")
-env_condition = st.sidebar.selectbox(
-    "Select Current Condition",
-    ["Clear Sky", "Heavy Traffic", "Monsoon Rain", "Road Closure"]
+G_base = build_base_graph(df)
+
+@st.cache_data
+def get_coords(city_list):
+    random.seed(42)
+    return {city: (random.uniform(28.4, 28.8), random.uniform(77.0, 77.4)) for city in city_list}
+
+coords = get_coords(cities)
+
+# =========================
+# 3. UI SIDEBAR
+# =========================
+st.sidebar.header("🛠 Route Environment")
+condition = st.sidebar.selectbox(
+    "Current Condition",
+    ["Normal/Clear", "Heavy Traffic", "Rainy/Weather", "Road Blockage"]
 )
 
-# Q-Learning inspired weight multipliers
-penalties = {
-    "Clear Sky": 1.0,
-    "Heavy Traffic": 3.5,
-    "Monsoon Rain": 2.2,
-    "Road Closure": 15.0
+# Environment multipliers to simulate Q-Learning path costs
+condition_map = {
+    "Normal/Clear": {"penalty": 1.0, "color": "black", "mult": 1.0},
+    "Heavy Traffic": {"penalty": 5.0, "color": "orange", "mult": 1.3},
+    "Rainy/Weather": {"penalty": 3.0, "color": "blue", "mult": 1.15},
+    "Road Blockage": {"penalty": 25.0, "color": "red", "mult": 1.8}
 }
 
-col1, col2 = st.columns([1, 3])
-
+# =========================
+# 4. MAIN INTERFACE
+# =========================
+col1, col2 = st.columns(2)
 with col1:
-    source = st.selectbox("🟢 Source Location", sorted(CITY_COORDS.keys()), index=0)
-    destination = st.selectbox("🔴 Destination", sorted(CITY_COORDS.keys()), index=1)
-    
-    # Load and build graph
-    df = pd.read_csv("bookings.csv")
-    df = df.dropna()
-    
-    # Apply dynamic weights based on environment
-    penalty = penalties[env_condition]
-    graph = {}
-    for _, row in df.iterrows():
-        u, v, d = row['Pickup Location'], row['Drop Location'], row['Ride Distance']
-        # Apply penalty randomly to simulate specific road blocks
-        current_weight = d * (penalty if random.random() < 0.4 else 1.0)
-        
-        if u not in graph: graph[u] = []
-        graph[u].append((v, current_weight))
-        if v not in graph: graph[v] = []
-        graph[v].append((u, current_weight))
-
-    if st.button("🚀 Optimize Route"):
-        cost, path = dijkstra(CITY_COORDS.keys(), graph, source, destination)
-        
-        if path:
-            st.success(f"Path Found: {len(path)} nodes")
-            st.metric("Total Travel Cost", f"{cost:.2f} units")
-            
-            # Step-by-step display
-            st.write("### 🧭 Route Steps")
-            for i in range(len(path)-1):
-                st.write(f"📍 {path[i]} ⮕ {path[i+1]}")
-        else:
-            st.error("No path found under these conditions.")
-
+    start_node = st.selectbox("🟢 Source Node", cities, index=0)
 with col2:
-    # Map Visualization
-    if 'path' in locals() and path:
-        # Center map at source
-        m = folium.Map(location=CITY_COORDS[source], zoom_start=12)
+    end_node = st.selectbox("🔴 Destination Node", cities, index=1)
+
+if st.button("Calculate Dijkstra Route"):
+    
+    # --- DIJKSTRA RE-ROUTING LOGIC ---
+    temp_G = G_base.copy()
+    penalty = condition_map[condition]["penalty"]
+    
+    # Apply environmental cost to edges to force Dijkstra to find a detour
+    random.seed(hash(condition))
+    for u, v in temp_G.edges():
+        if random.random() < 0.4: # Affect 40% of the network
+            temp_G[u][v]['weight'] *= penalty
+
+    try:
+        # EXECUTE DIJKSTRA ALGORITHM
+        path = nx.shortest_path(temp_G, source=start_node, target=end_node, weight='weight')
         
-        # Plot full path line
-        points = [CITY_COORDS[node] for node in path]
-        folium.PolyLine(points, color="blue", weight=5, opacity=0.8).add_to(m)
+        # Sync with Dataset Ground Truth
+        direct_match = df[((df['Pickup Location'] == start_node) & (df['Drop Location'] == end_node)) | 
+                          ((df['Pickup Location'] == end_node) & (df['Drop Location'] == start_node))]
         
-        # Add specific markers
-        folium.Marker(CITY_COORDS[source], popup="START", icon=folium.Icon(color='green')).add_to(m)
-        folium.Marker(CITY_COORDS[destination], popup="END", icon=folium.Icon(color='red')).add_to(m)
+        base_total = direct_match.iloc[0]['Ride Distance'] if not direct_match.empty else None
         
-        # Middle nodes
-        for node in path[1:-1]:
-            folium.Marker(CITY_COORDS[node], popup=node, icon=folium.Icon(color='blue', icon='info-sign')).add_to(m)
+        # Calculate Segment Ratios for the newly found path
+        raw_sum = 0.0
+        raw_segments = []
+        for i in range(len(path)-1):
+            u, v = path[i], path[i+1]
+            d = G_base[u][v]['weight']
+            raw_sum += d
+            raw_segments.append({'u': u, 'v': v, 'base': d})
+
+        if base_total is None: base_total = raw_sum
+        dynamic_total = base_total * condition_map[condition]["mult"]
+        
+        # Display Final Calculation
+        res1, res2 = st.columns([1, 2])
+        with res1:
+            st.metric("Total Route Distance", f"{dynamic_total:.2f} km")
+            st.write("### 🧭 Step-by-Step Dijkstra Path")
+            for seg in raw_segments:
+                # Distribute total proportionally
+                step_dist = (seg['base'] / raw_sum) * dynamic_total
+                st.write(f"➡ **{seg['u']}** → **{seg['v']}** = `{step_dist:.2f} km`")
+                st.divider()
+
+        with res2:
+            m = folium.Map(location=coords[start_node], zoom_start=11)
             
-        st_folium(m, width=900, height=600)
-    else:
-        st.info("Select locations and click 'Optimize' to view the map.")
+            # Draw Dijkstra Path
+            pts = [coords[city] for city in path]
+            folium.PolyLine(pts, color=condition_map[condition]["color"], weight=6).add_to(m)
+            
+            # Add Markers
+            for i, city in enumerate(path):
+                if i == 0:
+                    folium.Marker(coords[city], icon=folium.Icon(color='green')).add_to(m)
+                elif i == len(path)-1:
+                    folium.Marker(coords[city], icon=folium.Icon(color='red')).add_to(m)
+                else:
+                    folium.Marker(coords[city], icon=folium.Icon(color='blue')).add_to(m)
+            
+            components.html(m._repr_html_(), height=800)
+
+    except nx.NetworkXNoPath:
+        st.error("No path found under these severe conditions.")
