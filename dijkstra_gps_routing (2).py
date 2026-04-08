@@ -9,7 +9,7 @@ import streamlit.components.v1 as components
 # 1. PAGE CONFIG
 # =========================
 st.set_page_config(layout="wide", page_title="Dijkstra Route Optimizer")
-st.title("⚡ Final Corrected Dijkstra Optimizer")
+st.title("🚗Route Optimizer")
 
 # =========================
 # 2. FAST DATA LOADING
@@ -79,7 +79,7 @@ with c1:
 with c2:
     destination = st.selectbox("🔴 Destination", cities, index=cities.index("AIIMS") if "AIIMS" in cities else 1)
 
-if st.button("🚀 Run Optimized Dijkstra"):
+if st.button("🔍 Get Directions"):
     # RE-ROUTING LOGIC
     dynamic_graph = {}
     penalty_val = cond_config[condition]["penalty"]
@@ -131,8 +131,7 @@ if st.button("🚀 Run Optimized Dijkstra"):
                 st.write(f"➡ **{u}** → **{v}** = `{disp_dist:.2f} km`")
                 st.divider()
             
-            st.success(f"Verified Sum: {calculated_sum:.2f} km")
-
+            
         with res_col2:
             m = folium.Map(location=coords[source], zoom_start=11)
             pts = [coords[n] for n in path]
