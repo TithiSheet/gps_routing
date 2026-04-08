@@ -8,11 +8,11 @@ import streamlit.components.v1 as components
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(layout="wide", page_title="Instant Route Optimizer")
-st.title("🚀 Lightning-Fast Dijkstra Optimizer")
+st.set_page_config(layout="wide", page_title="Instant Optimizer")
+st.title("⚡ Ultra-Fast Route Optimizer")
 
 # =========================
-# 1. FAST DATA LOADING
+# 1. INSTANT DATA LOADING
 # =========================
 @st.cache_data
 def load_optimized_data():
@@ -21,30 +21,28 @@ def load_optimized_data():
     df['Ride Distance'] = pd.to_numeric(df['Ride Distance'], errors='coerce')
     df = df.dropna()
     
-    # Create a quick-lookup dictionary for 'Ride Distance'
-    # This replaces the slow df[df['col'] == 'val'] search
-    distance_lookup = {}
-    for row in df.itertuples(index=False):
-        key = tuple(sorted([row[0], row[1]]))
-        if key not in distance_lookup or row[2] < distance_lookup[key]:
-            distance_lookup[key] = row[2]
-            
-    cities = sorted(list(set(df['Pickup Location']).union(set(df['Drop Location']))))
-    return distance_lookup, cities
+    # Pre-aggregate to unique routes to shrink the graph size significantly
+    agg_df = df.groupby(["Pickup Location", "Drop Location"])["Ride Distance"].min().reset_index()
+    
+    # Fast lookup dictionary
+    dist_lookup = {(row[0], row[1]): row[2] for row in agg_df.itertuples(index=False)}
+    cities = sorted(list(set(agg_df['Pickup Location']).union(set(agg_df['Drop Location']))))
+    
+    return dist_lookup, cities, agg_df
 
-dist_lookup, cities = load_optimized_data()
+dist_lookup, cities, agg_df = load_optimized_data()
 
 # =========================
-# 2. CACHED GRAPH RESOURCE
+# 2. PERMANENT GRAPH RESOURCE
 # =========================
 @st.cache_resource
-def build_static_graph(lookup_dict):
+def build_permanent_graph(_agg_df):
     G = nx.Graph()
-    for (u, v), dist in lookup_dict.items():
-        G.add_edge(u, v, weight=dist)
+    for row in _agg_df.itertuples(index=False):
+        G.add_edge(row[0], row[1], weight=row[2])
     return G
 
-G_base = build_static_graph(dist_lookup)
+G_base = build_permanent_graph(agg_df)
 
 @st.cache_data
 def get_coords(city_list):
@@ -63,14 +61,14 @@ condition = st.sidebar.selectbox(
 )
 
 condition_map = {
-    "Normal/Clear": {"penalty": 1.0, "color": "black", "mult": 1.0},
-    "Heavy Traffic": {"penalty": 5.0, "color": "orange", "mult": 1.3},
-    "Rainy/Weather": {"penalty": 3.0, "color": "blue", "mult": 1.15},
-    "Road Blockage": {"penalty": 25.0, "color": "red", "mult": 1.8}
+    "Normal/Clear": {"color": "black", "mult": 1.0},
+    "Heavy Traffic": {"color": "orange", "mult": 1.3},
+    "Rainy/Weather": {"color": "blue", "mult": 1.15},
+    "Road Blockage": {"color": "red", "mult": 1.8}
 }
 
 # =========================
-# 4. CALCULATION
+# 4. INSTANT CALCULATION
 # =========================
 col1, col2 = st.columns(2)
 with col1:
@@ -79,23 +77,14 @@ with col2:
     end_node = st.selectbox("🔴 Destination", cities, index=1)
 
 if st.button("Calculate Optimized Route"):
-    # Apply Dijkstra with dynamic penalties
-    temp_G = G_base.copy()
-    penalty = condition_map[condition]["penalty"]
-    
-    # Apply penalty to random edges for variety
-    random.seed(hash(condition))
-    for u, v in temp_G.edges():
-        if random.random() < 0.2: # Only affect 20% for speed
-            temp_G[u][v]['weight'] *= penalty
-
     try:
-        # Run Dijkstra (Very fast on a cached graph)
-        path = nx.shortest_path(temp_G, source=start_node, target=end_node, weight='weight')
+        # PATHFINDING: Directly on G_base (No more slow copying!)
+        # We find the path first
+        path = nx.shortest_path(G_base, source=start_node, target=end_node, weight='weight')
         
-        # Fast lookup for total distance
-        lookup_key = tuple(sorted([start_node, end_node]))
-        base_total = dist_lookup.get(lookup_key)
+        # Calculate distance
+        # Check both directions in the lookup
+        base_total = dist_lookup.get((start_node, end_node)) or dist_lookup.get((end_node, start_node))
         
         raw_sum = 0.0
         steps = []
@@ -105,15 +94,17 @@ if st.button("Calculate Optimized Route"):
             raw_sum += d
             steps.append({'u': u, 'v': v, 'base': d})
 
+        # Apply multiplier
         if base_total is None: base_total = raw_sum
         dynamic_total = base_total * condition_map[condition]["mult"]
 
-        # --- Display ---
+        # --- Display Results ---
         res1, res2 = st.columns([1, 2])
         with res1:
             st.metric("Total Route Distance", f"{dynamic_total:.2f} km")
             st.write("### 🧭 Path Segments")
             for s in steps:
+                # Proportional calculation
                 seg_dist = (s['base'] / raw_sum) * dynamic_total
                 st.write(f"➡ **{s['u']}** → **{s['v']}** = `{seg_dist:.2f} km`")
 
