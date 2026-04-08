@@ -9,7 +9,7 @@ import streamlit.components.v1 as components
 # 1. PAGE CONFIG
 # =========================
 st.set_page_config(layout="wide", page_title="Dijkstra Route Optimizer")
-st.title("🚗 Route Optimizer")
+st.title("🚗 Smart Route Optimizer")
 
 # =========================
 # 2. FAST DATA LOADING
