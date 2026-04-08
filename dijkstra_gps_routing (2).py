@@ -148,6 +148,22 @@ if st.button("🔍 Get Directions"):
                     icon=folium.Icon(color=icon_color, icon='info-sign')
                 ).add_to(m)
             
+            # --- ADDED LEGEND SECTION ---
+            legend_html = f'''
+                <div style="position: fixed; 
+                            bottom: 50px; left: 50px; width: 160px; height: 120px; 
+                            background-color: white; border:2px solid grey; z-index:9999; font-size:14px;
+                            padding: 10px; border-radius: 5px;">
+                <b>📍 Map Legend</b><br>
+                <i style="background: green; width: 10px; height: 10px; border-radius: 50%; display: inline-block;"></i> Source<br>
+                <i style="background: blue; width: 10px; height: 10px; border-radius: 50%; display: inline-block;"></i> Stop Node<br>
+                <i style="background: red; width: 10px; height: 10px; border-radius: 50%; display: inline-block;"></i> Destination<br>
+                <i style="background: {cond_config[condition]["color"]}; width: 20px; height: 3px; display: inline-block;"></i> Route Path
+                </div>
+                '''
+            m.get_root().html.add_child(folium.Element(legend_html))
+            # ---------------------------
+
             components.html(m._repr_html_(), height=800)
     else:
         st.error("No path found under these environmental conditions.")
