@@ -8,44 +8,46 @@ import streamlit.components.v1 as components
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(layout="wide", page_title="Dijkstra Route Optimizer")
-st.title("🚀 High-Speed Dijkstra Optimizer")
+st.set_page_config(layout="wide", page_title="Instant Route Optimizer")
+st.title("🚀 Lightning-Fast Dijkstra Optimizer")
 
 # =========================
-# 1. LOAD DATA (Cached)
+# 1. FAST DATA LOADING
 # =========================
 @st.cache_data
-def load_and_clean_data():
-    # Use only necessary columns to save memory
-    df = pd.read_csv("bookings.csv", encoding="latin1", on_bad_lines='skip')
-    df.columns = df.columns.str.strip()
+def load_optimized_data():
+    # Load only necessary columns
+    df = pd.read_csv("bookings.csv", usecols=["Pickup Location", "Drop Location", "Ride Distance"], encoding="latin1")
     df['Ride Distance'] = pd.to_numeric(df['Ride Distance'], errors='coerce')
-    return df.dropna(subset=['Ride Distance'])
+    df = df.dropna()
+    
+    # Create a quick-lookup dictionary for 'Ride Distance'
+    # This replaces the slow df[df['col'] == 'val'] search
+    distance_lookup = {}
+    for row in df.itertuples(index=False):
+        key = tuple(sorted([row[0], row[1]]))
+        if key not in distance_lookup or row[2] < distance_lookup[key]:
+            distance_lookup[key] = row[2]
+            
+    cities = sorted(list(set(df['Pickup Location']).union(set(df['Drop Location']))))
+    return distance_lookup, cities
 
-df = load_and_clean_data()
-cities = sorted(set(df['Pickup Location']).union(set(df['Drop Location'])))
+dist_lookup, cities = load_optimized_data()
 
 # =========================
-# 2. BUILD GRAPH (Cached Resource)
+# 2. CACHED GRAPH RESOURCE
 # =========================
 @st.cache_resource
-def build_base_graph(_df):
+def build_static_graph(lookup_dict):
     G = nx.Graph()
-    # itertuples is 10x faster than iterrows for 150k rows
-    for row in _df.itertuples(index=False):
-        u, v, d = row[0], row[1], row[2] # Adjust if CSV order differs
-        if G.has_edge(u, v):
-            if d < G[u][v]['weight']:
-                G[u][v]['weight'] = d
-        else:
-            G.add_edge(u, v, weight=d)
+    for (u, v), dist in lookup_dict.items():
+        G.add_edge(u, v, weight=dist)
     return G
 
-G_base = build_base_graph(df)
+G_base = build_static_graph(dist_lookup)
 
 @st.cache_data
 def get_coords(city_list):
-    # GPS Logic: Using cached fixed coordinates
     random.seed(42)
     return {city: (random.uniform(28.4, 28.8), random.uniform(77.0, 77.4)) for city in city_list}
 
@@ -60,12 +62,11 @@ condition = st.sidebar.selectbox(
     ["Normal/Clear", "Heavy Traffic", "Rainy/Weather", "Road Blockage"]
 )
 
-# Q-Learning inspired path selection multipliers
 condition_map = {
     "Normal/Clear": {"penalty": 1.0, "color": "black", "mult": 1.0},
-    "Heavy Traffic": {"penalty": 4.5, "color": "orange", "mult": 1.3},
-    "Rainy/Weather": {"penalty": 2.5, "color": "blue", "mult": 1.15},
-    "Road Blockage": {"penalty": 20.0, "color": "red", "mult": 1.8}
+    "Heavy Traffic": {"penalty": 5.0, "color": "orange", "mult": 1.3},
+    "Rainy/Weather": {"penalty": 3.0, "color": "blue", "mult": 1.15},
+    "Road Blockage": {"penalty": 25.0, "color": "red", "mult": 1.8}
 }
 
 # =========================
@@ -73,30 +74,28 @@ condition_map = {
 # =========================
 col1, col2 = st.columns(2)
 with col1:
-    start_node = st.selectbox("🟢 Source Node", cities, index=0)
+    start_node = st.selectbox("🟢 Source", cities, index=0)
 with col2:
-    end_node = st.selectbox("🔴 Destination Node", cities, index=1)
+    end_node = st.selectbox("🔴 Destination", cities, index=1)
 
 if st.button("Calculate Optimized Route"):
     # Apply Dijkstra with dynamic penalties
     temp_G = G_base.copy()
     penalty = condition_map[condition]["penalty"]
     
-    # We apply the penalty to a random subset of edges to force a path change
+    # Apply penalty to random edges for variety
     random.seed(hash(condition))
     for u, v in temp_G.edges():
-        if random.random() < 0.35:
+        if random.random() < 0.2: # Only affect 20% for speed
             temp_G[u][v]['weight'] *= penalty
 
     try:
-        # Run Dijkstra
+        # Run Dijkstra (Very fast on a cached graph)
         path = nx.shortest_path(temp_G, source=start_node, target=end_node, weight='weight')
         
-        # Calculate consistent distance based on dataset logic
-        direct_match = df[((df['Pickup Location'] == start_node) & (df['Drop Location'] == end_node)) | 
-                          ((df['Pickup Location'] == end_node) & (df['Drop Location'] == start_node))]
-        
-        base_total = direct_match.iloc[0]['Ride Distance'] if not direct_match.empty else None
+        # Fast lookup for total distance
+        lookup_key = tuple(sorted([start_node, end_node]))
+        base_total = dist_lookup.get(lookup_key)
         
         raw_sum = 0.0
         steps = []
@@ -123,9 +122,8 @@ if st.button("Calculate Optimized Route"):
             pts = [coords[city] for city in path]
             folium.PolyLine(pts, color=condition_map[condition]["color"], weight=6).add_to(m)
             
-            # Identifiable markers
-            folium.Marker(coords[start_node], icon=folium.Icon(color='green', icon='play')).add_to(m)
-            folium.Marker(coords[end_node], icon=folium.Icon(color='red', icon='stop')).add_to(m)
+            folium.Marker(coords[start_node], icon=folium.Icon(color='green')).add_to(m)
+            folium.Marker(coords[end_node], icon=folium.Icon(color='red')).add_to(m)
             for node in path[1:-1]:
                 folium.Marker(coords[node], icon=folium.Icon(color='blue')).add_to(m)
             
