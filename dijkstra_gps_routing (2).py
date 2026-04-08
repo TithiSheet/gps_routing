@@ -67,13 +67,12 @@ coords = get_coords(cities)
 st.sidebar.header("🛠 Environment")
 condition = st.sidebar.selectbox(
     "Current Condition",
-    ["Normal/Clear", "Heavy Traffic", "Monsoon Rain", "Road Blockage"]
+    ["Normal/Clear",  "Road Blockage"]
 )
 
 cond_config = {
     "Normal/Clear": {"mult": 1.0, "penalty": 1.0, "color": "black"},
-    "Heavy Traffic": {"mult": 1.3, "penalty": 5.0, "color": "orange"},
-    "Monsoon Rain": {"mult": 1.15, "penalty": 2.5, "color": "blue"},
+    
     "Road Blockage": {"mult": 1.8, "penalty": 20.0, "color": "red"}
 }
 
