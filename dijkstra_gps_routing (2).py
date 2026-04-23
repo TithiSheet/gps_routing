@@ -156,10 +156,10 @@ if st.button("🔍 Get Directions"):
                             background-color: white; border:2px solid grey; z-index:9999; font-size:14px;
                             padding: 10px; border-radius: 5px;">
                 <b>📍 Map Legend</b><br>
-                <i style="background: green; width: 10px; height: 10px; border-radius: 50%; display: inline-block;"></i> Source<br>
-                <i style="background: blue; width: 10px; height: 10px; border-radius: 50%; display: inline-block;"></i> Stop Node<br>
-                <i style="background: red; width: 10px; height: 10px; border-radius: 50%; display: inline-block;"></i> Destination<br>
-                <i style="background: {cond_config[condition]["color"]}; width: 20px; height: 3px; display: inline-block;"></i> Route Path
+                 <span style="color: green;">●</span> Source Node<br>
+                 <span style="color: blue;">●</span> Middle Node<br>
+                 <span style="color: red;">●</span> Destination Node<br>
+                 <span style="color: {route_color};"><b>—</b></span> <b>{condition} Path</b>
                 </div>
                 '''
             m.get_root().html.add_child(folium.Element(legend_html))
