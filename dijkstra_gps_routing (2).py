@@ -115,6 +115,7 @@ if st.button("🔍 Get Directions"):
         target_total = base_val * cond_config[condition]["mult"]
         
         # --- DISPLAY RESULTS ---
+        st.info(f"Environments: **{condition}**.")
         res_col1, res_col2 = st.columns([1, 2])
         
         with res_col1:
