@@ -136,7 +136,7 @@ if st.button("🔍 Get Directions"):
         with res_col2:
             m = folium.Map(location=coords[source], zoom_start=11)
             pts = [coords[n] for n in path]
-            folium.PolyLine(pts, color=cond_config[condition]["color"], weight=7, opacity=0.8).add_to(m)
+            folium.PolyLine(pts, color=route_color, weight=7, opacity=0.8).add_to(m)
             
             # Markers with Node Names
             for i, n in enumerate(path):
