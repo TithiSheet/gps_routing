@@ -16,6 +16,7 @@ st.title("🚗 Smart Route Optimizer")
 # =========================
 @st.cache_data
 def load_optimized_data():
+    # Note: Ensure bookings.csv exists in your directory
     df = pd.read_csv("bookings.csv", usecols=["Pickup Location", "Drop Location", "Ride Distance"], encoding="latin1")
     df = df.dropna()
     # Aggregation for speed
@@ -70,6 +71,9 @@ cond_config = {
     "Road Blockage": {"mult": 1.8, "penalty": 50.0, "color": "red"}
 }
 
+# FIX: Define route_color based on the selected condition
+route_color = cond_config[condition]["color"]
+
 # =========================
 # 5. EXECUTION
 # =========================
@@ -110,7 +114,6 @@ if st.button("🔍 Get Directions"):
             segments.append((u, v, orig_d))
 
         # C. Define the Absolute Total Distance
-        # We use the dataset value if it exists, otherwise the physical path sum
         base_val = base_match['Ride Distance'].iloc[0] if not base_match.empty else path_original_sum
         target_total = base_val * cond_config[condition]["mult"]
         
@@ -124,14 +127,12 @@ if st.button("🔍 Get Directions"):
             
             calculated_sum = 0.0
             for u, v, orig_d in segments:
-                # MATH FIX: (Segment Original / Total Original Sum) * Target Total
-                # This ensures the sum always equals the target_total
-                disp_dist = (orig_d / path_original_sum) * target_total
+                # Math ensures the sum always equals the target_total
+                disp_dist = (orig_d / path_original_sum) * target_total if path_original_sum > 0 else 0
                 calculated_sum += disp_dist
                 
                 st.write(f"➡ **{u}** → **{v}** = `{disp_dist:.2f} km`")
                 st.divider()
-            
             
         with res_col2:
             m = folium.Map(location=coords[source], zoom_start=11)
@@ -149,7 +150,7 @@ if st.button("🔍 Get Directions"):
                     icon=folium.Icon(color=icon_color, icon='info-sign')
                 ).add_to(m)
             
-            # --- ADDED LEGEND SECTION ---
+            # --- LEGEND SECTION ---
             legend_html = f'''
                 <div style="position: fixed; 
                             bottom: 50px; left: 50px; width: 160px; height: 120px; 
@@ -163,7 +164,6 @@ if st.button("🔍 Get Directions"):
                 </div>
                 '''
             m.get_root().html.add_child(folium.Element(legend_html))
-            # ---------------------------
 
             components.html(m._repr_html_(), height=800)
     else:
