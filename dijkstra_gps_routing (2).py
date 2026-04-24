@@ -15,7 +15,7 @@ st.set_page_config(layout="wide", page_title="Dijkstra Route Optimizer")
 st.markdown("""
     <style>
     html, body, [class*="css"] {
-        font-size: 20px !important; /* Larger global font */
+        font-size: 19px !important; /* Larger global font */
     }
     .stButton>button {
         width: 100% !important;
@@ -27,7 +27,7 @@ st.markdown("""
         border-radius: 10px !important;
     }
     .stSelectbox label {
-        font-size: 22px !important;
+        font-size: 20px !important;
         font-weight: bold !important;
     }
     </style>
