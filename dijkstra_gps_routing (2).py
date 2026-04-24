@@ -15,7 +15,7 @@ st.set_page_config(layout="wide", page_title="Dijkstra Route Optimizer")
 st.markdown("""
     <style>
     html, body, [class*="css"] {
-        font-size: 18px !important; /* Larger global font */
+        font-size: 20px !important; /* Larger global font */
     }
     .stButton>button {
         width: 100% !important;
@@ -27,7 +27,7 @@ st.markdown("""
         border-radius: 10px !important;
     }
     .stSelectbox label {
-        font-size: 20px !important;
+        font-size: 22px !important;
         font-weight: bold !important;
     }
     </style>
@@ -135,7 +135,7 @@ if st.button("🔍 SEARCH OPTIMIZED ROUTE"):
         base_val = base_match['Ride Distance'].iloc[0] if not base_match.empty else path_original_sum
         target_total = base_val * cond_config[condition]["mult"]
         
-        st.info(f"Analysis complete for environment: **{condition}**.")
+        st.info(f"Environment: **{condition}**.")
         res_col1, res_col2 = st.columns([1, 2])
         
         with res_col1:
