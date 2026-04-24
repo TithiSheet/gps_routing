@@ -178,4 +178,3 @@ if st.button("🔍 SEARCH OPTIMIZED ROUTE"):
             components.html(m._repr_html_(), height=800)
     else:
         st.error("The environment is too restricted to find a viable path. Try changing conditions.")
-
